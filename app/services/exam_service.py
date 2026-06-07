@@ -1,0 +1,102 @@
+"""Nghiệp vụ lịch sử đề: list (lọc + phân trang) + detail (nhúng base64 ảnh).
+
+Detail: đọc full record từ Mongo của AI → duyệt cấu trúc `output`, với MỌI ảnh có
+`minio_key` thì tải bytes từ MinIO, encode base64 và gắn thêm field `data_uri` để FE
+render thẳng (không phụ thuộc presigned URL nội bộ).
+"""
+from __future__ import annotations
+
+from typing import Any, Optional
+
+from app.clients.minio_client import MinioStorage
+from app.core.logging import logger
+from app.repositories.exam_repo import ExamRepository
+from app.schemas.exam import ExamDetailResponse, ExamListResponse, ExamSummary
+
+
+class ExamService:
+    def __init__(self, repo: ExamRepository, storage: MinioStorage):
+        self.repo = repo
+        self.storage = storage
+
+    # ------------------------------------------------------------
+    def list(
+        self,
+        exam_id: Optional[str] = None,
+        source_file: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> ExamListResponse:
+        total, docs = self.repo.list(
+            exam_id=exam_id, source_file=source_file, page=page, page_size=page_size
+        )
+        return ExamListResponse(
+            total=total,
+            page=page,
+            page_size=page_size,
+            items=[ExamSummary.from_doc(d) for d in docs],
+        )
+
+    # ------------------------------------------------------------
+    def get_detail(self, exam_id: str) -> Optional[ExamDetailResponse]:
+        doc = self.repo.get(exam_id)
+        if not doc:
+            return None
+
+        output = doc.get("output", {}) or {}
+        n_embedded = self._embed_images(output)
+
+        return ExamDetailResponse(
+            exam_id=str(doc.get("_id") or doc.get("exam_id", "")),
+            source_file=doc.get("source_file", ""),
+            status=doc.get("status", "done"),
+            created_at=doc.get("created_at", ""),
+            n_pages=doc.get("n_pages", 0),
+            n_questions=doc.get("n_questions", 0),
+            n_groups=doc.get("n_groups", 0),
+            metadata=doc.get("metadata", {}) or output.get("metadata", {}),
+            output=output,
+            images_embedded=n_embedded,
+        )
+
+    # ------------------------------------------------------------
+    def _embed_images(self, node: Any, _cache: Optional[dict] = None) -> int:
+        """Duyệt đệ quy cấu trúc; gắn data_uri cho mọi dict có minio_key.
+
+        Trả về số ảnh đã nhúng. Cache theo key để không tải trùng (vd passage = header).
+        """
+        if _cache is None:
+            _cache = {}
+        count = 0
+
+        if isinstance(node, dict):
+            key = node.get("minio_key")
+            # Là 1 đối tượng ảnh khi có minio_key trỏ tới file ảnh
+            if isinstance(key, str) and key and self._looks_like_image(key):
+                if key not in _cache:
+                    _cache[key] = self.storage.get_data_uri(key, "image/png")
+                data_uri = _cache[key]
+                if data_uri:
+                    node["data_uri"] = data_uri
+                    count += 1
+            # Tiếp tục duyệt các giá trị con
+            for v in node.values():
+                count += self._embed_images(v, _cache)
+
+        elif isinstance(node, list):
+            for item in node:
+                count += self._embed_images(item, _cache)
+
+        return count
+
+    @staticmethod
+    def _looks_like_image(key: str) -> bool:
+        k = key.lower()
+        return k.endswith((".png", ".jpg", ".jpeg", ".webp"))
+
+
+def get_exam_service() -> ExamService:
+    # Lười khởi tạo để không cần Mongo/MinIO lúc import
+    from app.clients.minio_client import get_storage
+    from app.repositories.exam_repo import get_exam_repo
+    return ExamService(get_exam_repo(), get_storage())

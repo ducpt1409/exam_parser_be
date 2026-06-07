@@ -1,0 +1,64 @@
+# ============================================================
+# exam_parser_be — BE stack RIÊNG (KHÔNG dùng chung với AI service)
+#
+#   be        : FastAPI proxy → gọi AI service (exam_parser_paddle)
+#   be-mongo  : MongoDB lưu lịch sử job của BE (riêng Mongo của AI service)
+#
+# Lệnh:
+#   docker compose build
+#   docker compose up -d
+#   docker compose logs -f be
+#   docker compose down
+# ============================================================
+
+services:
+  be:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: exam_parser_be:latest
+    container_name: exam_parser_be
+    restart: unless-stopped
+    depends_on:
+      be-mongo:
+        condition: service_started
+    ports:
+      - "9000:9000"               # BE (khác 8000 của AI service)
+    environment:
+      # AI service: mặc định trỏ về host gateway:8000 (AI chạy ở stack khác trên cùng máy).
+      # Đổi sang URL khác = trỏ BE sang AI service khác, không cần sửa code.
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://host.docker.internal:8000}
+      AI_TIMEOUT: "300"
+      MONGO_URI: mongodb://${BE_MONGO_USER:-admin}:${BE_MONGO_PASS:-admin12345}@be-mongo:27017/?authSource=admin
+      MONGO_DB: ${BE_MONGO_DB:-exam_parser_be}
+      MONGO_COLLECTION: be_jobs
+      # --- AI history store (read-only) — Mongo + MinIO của AI service (stack khác, cùng máy) ---
+      AI_MONGO_URI: ${AI_MONGO_URI:-mongodb://admin:admin12345@host.docker.internal:27017/?authSource=admin}
+      AI_MONGO_DB: ${AI_MONGO_DB:-exam_parser}
+      AI_MONGO_COLLECTION: ${AI_MONGO_COLLECTION:-exams}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-host.docker.internal:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-admin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-admin12345}
+      MINIO_BUCKET: ${MINIO_BUCKET:-exam-parser}
+      MINIO_SECURE: "false"
+      MAX_UPLOAD_MB: "50"
+      CORS_ORIGINS: "*"
+      LOG_LEVEL: INFO
+    # WSL native Docker KHÔNG tự có host.docker.internal → ánh xạ tới host-gateway:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  be-mongo:
+    image: mongo:7
+    container_name: exam_parser_be_mongo
+    restart: unless-stopped
+    ports:
+      - "27018:27017"             # map ra 27018 để không đụng Mongo AI service (27017)
+    volumes:
+      - be_mongo_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${BE_MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${BE_MONGO_PASS:-admin12345}
+
+volumes:
+  be_mongo_data:
