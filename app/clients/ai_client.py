@@ -17,18 +17,17 @@ from app.core.logging import logger
 
 @dataclass
 class AIParseResult:
-    """Kết quả chuẩn hoá từ AI service (đã map về dạng BE dùng chung)."""
+    """Kết quả chuẩn hoá từ AI service (đã map về dạng BE dùng chung).
+
+    AI service chỉ trả `exam_id` khi thành công — kết quả đầy đủ đọc qua
+    GET /api/v1/exams/{exam_id} (exam_repo đọc store của AI).
+    """
     ok: bool
     exam_id: Optional[str] = None
-    n_pages: int = 0
-    n_questions: int = 0
-    n_groups: int = 0
-    bucket: str = ""
-    minio_prefix: str = ""
+    message: str = ""
     # khi lỗi:
     stage: Optional[str] = None
     error_code: Optional[str] = None
-    message: str = ""
     detail: str = ""
 
 
@@ -45,7 +44,8 @@ class AIClient(ABC):
 
 
 class HttpAIClient(AIClient):
-    """Gọi exam_parser_paddle qua HTTP: POST /api/v1/exams/parse."""
+    """Gọi AI service (exam_parser_paddle hoặc exam_parser_mineru) qua HTTP:
+    POST /api/v1/exams/parse. API 2 service giống nhau → chỉ cần đổi base_url."""
 
     def __init__(self, base_url: Optional[str] = None, timeout: Optional[float] = None):
         self.base_url = (base_url or settings.ai_service_url).rstrip("/")
@@ -72,11 +72,7 @@ class HttpAIClient(AIClient):
             return AIParseResult(
                 ok=True,
                 exam_id=data.get("exam_id"),
-                n_pages=data.get("n_pages", 0),
-                n_questions=data.get("n_questions", 0),
-                n_groups=data.get("n_groups", 0),
-                bucket=data.get("bucket", ""),
-                minio_prefix=data.get("minio_prefix", ""),
+                message=data.get("message", "Đã xử lý xong"),
             )
 
         # Lỗi: giữ nguyên error_code + stage từ AI service để client/BE bắt theo mã

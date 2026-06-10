@@ -42,11 +42,6 @@ class JobService:
         if result.ok:
             job.status = JobStatus.DONE
             job.exam_id = result.exam_id
-            job.n_pages = result.n_pages
-            job.n_questions = result.n_questions
-            job.n_groups = result.n_groups
-            job.bucket = result.bucket
-            job.minio_prefix = result.minio_prefix
             job.stage = None
             job.error_code = None
             job.detail = ""

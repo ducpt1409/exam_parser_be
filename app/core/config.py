@@ -16,9 +16,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- AI service (exam_parser_paddle) ---
-    ai_service_url: str = "http://localhost:8000"
-    ai_timeout: float = 300.0          # giây — pipeline CPU có thể lâu
+    # --- AI service (exam_parser_paddle HOẶC exam_parser_mineru — API giống nhau) ---
+    ai_service_url: str = "http://localhost:8001"   # Cách B: exam_parser_mineru
+    ai_timeout: float = 600.0          # giây — MinerU request đầu nạp model + xếp hàng có thể lâu
 
     # --- MongoDB (lịch sử job của BE, riêng với Mongo của AI) ---
     mongo_uri: str = "mongodb://localhost:27018"

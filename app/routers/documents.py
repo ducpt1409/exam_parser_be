@@ -23,7 +23,7 @@ def get_job_service() -> JobService:
 
 
 @router.post("/documents", response_model=UploadResponse,
-             summary="Upload đề thi → chuyển tiếp AI service → lưu job")
+             summary="Upload đề thi → chuyển tiếp AI service → lưu job + trả exam_id")
 async def upload_document(
     file: UploadFile = File(...),
     ai: AIClient = Depends(get_ai_client),
@@ -53,21 +53,21 @@ async def upload_document(
     job = svc.create(filename, file.content_type or "application/pdf", size)
     logger.info(f"[BE] job {job.id} created cho {filename} ({size} bytes)")
 
-    # 2. Chuyển tiếp sang AI service (đồng bộ)
+    # 2. Chuyển tiếp sang AI service (đồng bộ) — AI chỉ trả exam_id khi thành công
     result = await ai.parse(filename, content, file.content_type or "application/pdf")
 
     # 3. Cập nhật job theo kết quả
     job = svc.finalize(job, result)
     logger.info(f"[BE] job {job.id} → {job.status} (exam_id={job.exam_id}, err={job.error_code})")
 
+    # Client dùng exam_id gọi tiếp GET /api/v1/exams/{exam_id} để lấy chi tiết đề
     return UploadResponse(
         job_id=job.id,
         status=job.status,
         exam_id=job.exam_id,
         error_code=job.error_code,
         stage=job.stage,
-        minio_prefix=job.minio_prefix,
-        message=("Đã xử lý xong" if result.ok else (result.message or "Xử lý lỗi")),
+        message=(result.message or "Đã xử lý xong") if result.ok else (result.message or "Xử lý lỗi"),
     )
 
 

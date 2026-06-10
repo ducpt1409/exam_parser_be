@@ -14,7 +14,11 @@ class JobStatus(str, Enum):
 
 
 class Job(BaseModel):
-    """Bản ghi job đầy đủ (lưu Mongo, _id = id)."""
+    """Bản ghi job đầy đủ (lưu Mongo, _id = id).
+
+    AI service chỉ trả `exam_id` khi thành công — chi tiết đề (n_questions, output...)
+    đọc qua GET /api/v1/exams/{exam_id}, không lưu lặp vào job.
+    """
     id: str
     filename: str
     content_type: str = "application/pdf"
@@ -23,11 +27,6 @@ class Job(BaseModel):
 
     # Kết quả khi done
     exam_id: Optional[str] = None
-    n_pages: int = 0
-    n_questions: int = 0
-    n_groups: int = 0
-    bucket: str = ""
-    minio_prefix: str = ""
 
     # Khi failed
     stage: Optional[str] = None
@@ -50,13 +49,13 @@ class Job(BaseModel):
 
 
 class UploadResponse(BaseModel):
-    """Trả về client sau khi upload (gọn — không kèm full JSON)."""
+    """Trả về client sau khi upload — chỉ trạng thái + id; client (FE/mobile) dùng
+    `exam_id` gọi tiếp GET /api/v1/exams/{exam_id} để lấy chi tiết đề."""
     job_id: str
     status: JobStatus
     exam_id: Optional[str] = None
     error_code: Optional[str] = None
     stage: Optional[str] = None
-    minio_prefix: Optional[str] = None
     message: str = ""
 
 

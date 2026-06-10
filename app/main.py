@@ -1,7 +1,8 @@
 """exam_parser_be — Backend service.
 
 Lớp proxy + nghiệp vụ: nhận file đề thi từ client → chuyển tiếp AI service
-(exam_parser_paddle) → lưu lịch sử job → trả trạng thái. Đổi AI = đổi AI_SERVICE_URL.
+(exam_parser_paddle hoặc exam_parser_mineru — API giống nhau) → lưu lịch sử job →
+trả trạng thái. Đổi AI = đổi AI_SERVICE_URL (không sửa code).
 
 Chạy local:
     uvicorn app.main:app --host 0.0.0.0 --port 9000 --reload

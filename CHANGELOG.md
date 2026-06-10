@@ -1,5 +1,40 @@
 # Changelog — exam_parser_be
 
+## [1.3.0] - 2026-06-10 - Upload chỉ trả id, chi tiết lấy qua API riêng
+
+### Mục đích
+Quy trình mới: upload xong chỉ nhận `{job_id, status, exam_id, error_code, stage, message}`;
+client (FE/mobile) dùng `exam_id` gọi tiếp `GET /api/v1/exams/{exam_id}` lấy chi tiết đề.
+Khớp với AI service mineru 0.2.3 (`POST /exams/parse` chỉ trả `{status, exam_id, message}`).
+
+### Giải pháp
+- **`app/clients/ai_client.py`**: bỏ tham số `include_images`; `AIParseResult` bỏ
+  `n_pages/n_questions/n_groups/bucket/minio_prefix/result` — chỉ còn
+  `ok, exam_id, message, stage, error_code, detail`.
+- **`app/schemas/job.py`**: `Job` bỏ các field thống kê (n_*, bucket, minio_prefix) —
+  không lưu lặp, chi tiết đã có trong store của AI; `UploadResponse` bỏ `result` +
+  `minio_prefix`.
+- **`app/routers/documents.py`**: `POST /documents` bỏ query `include_images`, response gọn.
+- 2 API lịch sử (`GET /exams`, `GET /exams/{exam_id}`) **không đổi** — vẫn đọc đầy đủ
+  từ Mongo/MinIO của AI service.
+
+---
+
+## [1.2.0] - 2026-06-08 - Upload trả luôn kết quả đầy đủ (public API)
+
+### Mục đích
+API upload khi thành công trả LUÔN `result` (kết quả đầy đủ từ AI: output + ảnh base64),
+phục vụ public API thu thập + đánh giá.
+
+### Giải pháp
+- **`app/clients/ai_client.py`**: `AIParseResult` thêm `result`; `parse()` thêm tham số
+  `include_images` (forward query `?include_images=`), gắn toàn bộ payload AI vào `result`.
+- **`app/schemas/job.py`**: `UploadResponse` thêm `result` (chỉ khi done).
+- **`app/routers/documents.py`**: `POST /documents` thêm query `include_images`; trả `result`
+  từ AI. KHÔNG lưu base64 vào `be_jobs` (job vẫn gọn).
+
+---
+
 ## [1.1.0] - 2026-06-07 - 2 API lịch sử đề cho FE (list + detail base64)
 
 ### Mục đích

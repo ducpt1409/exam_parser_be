@@ -1,7 +1,8 @@
 # ============================================================
 # exam_parser_be — BE stack RIÊNG (KHÔNG dùng chung với AI service)
 #
-#   be        : FastAPI proxy → gọi AI service (exam_parser_paddle)
+#   be        : FastAPI proxy → gọi AI service (exam_parser_paddle HOẶC exam_parser_mineru
+#               — API giống nhau, đổi service = đổi AI_SERVICE_URL)
 #   be-mongo  : MongoDB lưu lịch sử job của BE (riêng Mongo của AI service)
 #
 # Lệnh:
@@ -25,10 +26,10 @@ services:
     ports:
       - "9000:9000"               # BE (khác 8000 của AI service)
     environment:
-      # AI service: mặc định trỏ về host gateway:8000 (AI chạy ở stack khác trên cùng máy).
-      # Đổi sang URL khác = trỏ BE sang AI service khác, không cần sửa code.
-      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://host.docker.internal:8000}
-      AI_TIMEOUT: "300"
+      # Cách B: trỏ BE sang exam_parser_mineru ở cổng 8001 (paddle nếu còn thì ở 8000).
+      # Đổi service = chỉ đổi URL này, không sửa code.
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://host.docker.internal:8001}
+      AI_TIMEOUT: "600"
       MONGO_URI: mongodb://${BE_MONGO_USER:-admin}:${BE_MONGO_PASS:-admin12345}@be-mongo:27017/?authSource=admin
       MONGO_DB: ${BE_MONGO_DB:-exam_parser_be}
       MONGO_COLLECTION: be_jobs

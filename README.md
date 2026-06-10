@@ -18,7 +18,7 @@ mới), **không sửa router/nghiệp vụ**.
 
 | Method | Path | Mô tả |
 |---|---|---|
-| POST | `/api/v1/documents` | Upload đề thi (`multipart`, field `file`) → chuyển tiếp AI → trả job |
+| POST | `/api/v1/documents` | Upload đề thi (`multipart`, field `file`) → chuyển tiếp AI → trả `job_id` + `exam_id` |
 | GET | `/api/v1/documents/{job_id}` | Xem 1 job upload |
 | GET | `/api/v1/documents?limit=&skip=` | List job upload (audit log) |
 | GET | `/api/v1/exams` | **List lịch sử đề** (lọc `exam_id`/`source_file`, phân trang) |
@@ -63,7 +63,8 @@ BE đọc record đầy đủ, **tự tải ảnh crop từ MinIO theo `minio_ke
 > ⚠️ Cần kết nối tới **store của AI service**: biến `AI_MONGO_URI` + `MINIO_*` (xem §5).
 > Compose đã trỏ sẵn qua `host.docker.internal` (AI service chạy stack khác trên cùng máy).
 
-**POST /documents — thành công:**
+**POST /documents — thành công:** response gọn, chỉ trạng thái + id. Client (FE/mobile)
+dùng `exam_id` gọi tiếp `GET /api/v1/exams/{exam_id}` để lấy chi tiết đề.
 ```json
 {
   "job_id": "9f8e...hex",
@@ -71,8 +72,7 @@ BE đọc record đầy đủ, **tự tải ảnh crop từ MinIO theo `minio_ke
   "exam_id": "a1b2c3d4",
   "error_code": null,
   "stage": null,
-  "minio_prefix": "exams/a1b2c3d4/",
-  "message": "Đã xử lý xong"
+  "message": "Đã xử lý xong và lưu lên MinIO/Mongo"
 }
 ```
 
@@ -83,9 +83,8 @@ BE đọc record đầy đủ, **tự tải ảnh crop từ MinIO theo `minio_ke
   "status": "failed",
   "exam_id": "a1b2c3d4",
   "error_code": "E102",
-  "stage": "ocr",
-  "minio_prefix": null,
-  "message": "Lỗi PaddleOCR (layout/OCR)"
+  "stage": "mineru",
+  "message": "Lỗi MinerU (layout/OCR)"
 }
 ```
 
