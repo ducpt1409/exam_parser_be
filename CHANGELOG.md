@@ -1,5 +1,29 @@
 # Changelog — exam_parser_be
 
+## [1.4.0] - 2026-06-10 - BE stateless: bỏ Mongo riêng, dùng chung store exam_parser
+
+### Mục đích
+POC: BE không cần lưu gì — chỉ upload cho AI service xử lý, AI lưu vào store
+`exam_parser` (Mongo + MinIO), BE truy vấn store đó. Lịch sử = chính các bản ghi
+exam_parser (`GET /exams`), không còn job riêng.
+
+### Giải pháp
+- **XÓA** `app/schemas/job.py`, `app/repositories/job_repo.py`, `app/services/job_service.py`
+  (khôi phục từ git nếu sau cần audit log / chế độ bất đồng bộ).
+- **`app/schemas/common.py`** (MỚI): `UploadResponse` (bỏ `job_id`) + `HealthResponse`.
+- **`app/routers/documents.py`**: `POST /documents` stateless — validate → forward AI →
+  trả `{status, exam_id, error_code, stage, message}`. Bỏ `GET /documents`,
+  `GET /documents/{job_id}`.
+- **`app/main.py`**: `/health` ping Mongo store exam_parser (qua `exam_repo`) thay vì
+  Mongo riêng của BE.
+- **`app/core/config.py`**: bỏ `mongo_uri/mongo_db/mongo_collection` (BE) — chỉ còn
+  `AI_MONGO_*` (store exam_parser) + `MINIO_*`.
+- **`docker-compose.yml`**: bỏ service `be-mongo` + volume `be_mongo_data` + env Mongo BE
+  → stack BE chỉ còn 1 container `be`.
+- **`.env.example`**, **README**: cập nhật theo.
+
+---
+
 ## [1.3.0] - 2026-06-10 - Upload chỉ trả id, chi tiết lấy qua API riêng
 
 ### Mục đích

@@ -20,13 +20,9 @@ class Settings(BaseSettings):
     ai_service_url: str = "http://localhost:8001"   # Cách B: exam_parser_mineru
     ai_timeout: float = 600.0          # giây — MinerU request đầu nạp model + xếp hàng có thể lâu
 
-    # --- MongoDB (lịch sử job của BE, riêng với Mongo của AI) ---
-    mongo_uri: str = "mongodb://localhost:27018"
-    mongo_db: str = "exam_parser_be"
-    mongo_collection: str = "be_jobs"
-
-    # --- AI history store (read-only): Mongo + MinIO của AI service ---
-    # BE đọc lịch sử đề (1 đề = 1 bản ghi) + lấy ảnh crop để convert base64.
+    # --- Store DUY NHẤT (POC): Mongo + MinIO của AI service (db exam_parser) ---
+    # BE KHÔNG có Mongo riêng — AI service ghi, BE đọc (read-only) cho lịch sử +
+    # chi tiết đề (1 đề = 1 bản ghi) + lấy ảnh crop để convert base64.
     ai_mongo_uri: str = "mongodb://localhost:27017"
     ai_mongo_db: str = "exam_parser"
     ai_mongo_collection: str = "exams"

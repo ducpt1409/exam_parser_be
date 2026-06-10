@@ -1,8 +1,10 @@
 """exam_parser_be — Backend service.
 
-Lớp proxy + nghiệp vụ: nhận file đề thi từ client → chuyển tiếp AI service
-(exam_parser_paddle hoặc exam_parser_mineru — API giống nhau) → lưu lịch sử job →
-trả trạng thái. Đổi AI = đổi AI_SERVICE_URL (không sửa code).
+Lớp proxy STATELESS (POC): nhận file đề thi từ client → chuyển tiếp AI service
+(exam_parser_paddle hoặc exam_parser_mineru — API giống nhau) → trả exam_id.
+AI service tự lưu kết quả vào store `exam_parser` (Mongo + MinIO); BE truy vấn
+store đó cho lịch sử (GET /exams) + chi tiết (GET /exams/{exam_id}).
+Đổi AI = đổi AI_SERVICE_URL (không sửa code).
 
 Chạy local:
     uvicorn app.main:app --host 0.0.0.0 --port 9000 --reload
@@ -16,13 +18,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.clients.ai_client import get_ai_client
 from app.core.config import settings
 from app.core.logging import logger
-from app.repositories.job_repo import get_job_repo
+from app.repositories.exam_repo import get_exam_repo
 from app.routers import documents, exams
-from app.schemas.job import HealthResponse
+from app.schemas.common import HealthResponse
 
 app = FastAPI(
     title="exam_parser_be — Backend",
-    description="BE chuyển tiếp file đề thi sang AI service và quản lý lịch sử job",
+    description="BE chuyển tiếp file đề thi sang AI service; lịch sử/chi tiết đọc từ store exam_parser của AI",
     version="1.0.0",
 )
 
@@ -43,7 +45,7 @@ async def health():
     ai = get_ai_client()
     ai_ok = await ai.health()
     try:
-        mongo_ok = get_job_repo().ping()
+        mongo_ok = get_exam_repo().ping()   # Mongo của AI service (store exam_parser)
     except Exception:
         mongo_ok = False
     return HealthResponse(
@@ -58,5 +60,5 @@ async def health():
 async def startup():
     logger.info(
         f"BE start @ {settings.api_host}:{settings.api_port} "
-        f"| AI={settings.ai_service_url} | Mongo={settings.mongo_uri}"
+        f"| AI={settings.ai_service_url} | store={settings.ai_mongo_uri}"
     )
