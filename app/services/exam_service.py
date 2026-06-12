@@ -6,6 +6,8 @@ render thẳng (không phụ thuộc presigned URL nội bộ).
 """
 from __future__ import annotations
 
+import io
+import zipfile
 from typing import Any, Optional
 
 from app.clients.minio_client import MinioStorage
@@ -58,6 +60,39 @@ class ExamService:
             output=output,
             images_embedded=n_embedded,
         )
+
+    # ------------------------------------------------------------
+    def build_zip(self, exam_id: str) -> Optional[tuple[str, io.BytesIO]]:
+        """Nén toàn bộ thư mục MinIO của 1 đề (crops + overlay + raw + exam.json) thành zip.
+
+        Trả (tên file zip, buffer). Đề không tồn tại hoặc không có file nào → None.
+        """
+        doc = self.repo.get(exam_id)
+        if not doc:
+            return None
+
+        prefix = doc.get("minio_prefix") or f"exams/{exam_id}/"
+        keys = self.storage.list_keys(prefix)
+        if not keys:
+            logger.warning(f"[ExamService] đề {exam_id}: không có object nào dưới {prefix}")
+            return None
+
+        buf = io.BytesIO()
+        n_ok = 0
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for key in keys:
+                data = self.storage.get_bytes(key)
+                if data is None:
+                    continue    # 1 file lỗi không làm hỏng cả zip
+                # Tên trong zip = đường dẫn tương đối dưới prefix (crops/q1_full.png, ...)
+                arcname = key[len(prefix):] if key.startswith(prefix) else key
+                zf.writestr(arcname, data)
+                n_ok += 1
+        if n_ok == 0:
+            return None
+        buf.seek(0)
+        logger.info(f"[ExamService] zip đề {exam_id}: {n_ok}/{len(keys)} file")
+        return f"exam_{exam_id}.zip", buf
 
     # ------------------------------------------------------------
     def _embed_images(self, node: Any, _cache: Optional[dict] = None) -> int:

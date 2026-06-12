@@ -1,13 +1,16 @@
-"""Router lịch sử đề — 2 API cho FE.
+"""Router lịch sử đề — 3 API cho FE.
 
-GET /api/v1/exams           : list lịch sử (lọc exam_id/source_file, phân trang)
-GET /api/v1/exams/{exam_id} : chi tiết 1 đề (output đầy đủ + ảnh nhúng base64)
+GET /api/v1/exams                    : list lịch sử (lọc exam_id/source_file, phân trang)
+GET /api/v1/exams/{exam_id}          : chi tiết 1 đề (output đầy đủ + ảnh nhúng base64)
+GET /api/v1/exams/{exam_id}/download : tải toàn bộ thư mục dữ liệu đề trên MinIO (zip)
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from app.schemas.exam import ExamDetailResponse, ExamListResponse
 from app.services.exam_service import ExamService, get_exam_service
@@ -37,3 +40,24 @@ async def get_exam_detail(
     if not detail:
         raise HTTPException(status_code=404, detail=f"Không tìm thấy đề {exam_id}")
     return detail
+
+
+@router.get("/exams/{exam_id}/download",
+            summary="Tải toàn bộ thư mục dữ liệu đề thi trên MinIO về (file zip)")
+async def download_exam_data(
+    exam_id: str,
+    svc: ExamService = Depends(get_exam_service),
+):
+    # Nén nhiều file từ MinIO là việc nặng I/O → chạy ở thread riêng, không chặn event loop
+    result = await asyncio.to_thread(svc.build_zip, exam_id)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Không tìm thấy đề {exam_id} hoặc đề không có dữ liệu trên MinIO",
+        )
+    filename, buf = result
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

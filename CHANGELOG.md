@@ -1,5 +1,21 @@
 # Changelog — exam_parser_be
 
+## [1.5.0] - 2026-06-12 - API tải dữ liệu đề thi (zip thư mục MinIO)
+
+### Mục đích
+FE thêm nút "Tải dữ liệu đề thi" (bảng lịch sử + trang chi tiết) → BE cần API gom toàn bộ
+thư mục MinIO của 1 đề (crops + overlay + raw PDF + exam.json) thành 1 file zip.
+
+### Giải pháp
+- **`app/clients/minio_client.py`**: thêm `list_keys(prefix)` — list object đệ quy.
+- **`app/services/exam_service.py`**: thêm `build_zip(exam_id)` — đọc `minio_prefix` từ
+  record, tải từng object, nén zip in-memory (1 file lỗi không hỏng cả zip).
+- **`app/routers/exams.py`**: `GET /api/v1/exams/{exam_id}/download` → StreamingResponse
+  `application/zip` (`exam_{id}.zip`), chạy `asyncio.to_thread` để không chặn event loop.
+  404 nếu đề không tồn tại / không có dữ liệu trên MinIO.
+
+---
+
 ## [1.4.0] - 2026-06-10 - BE stateless: bỏ Mongo riêng, dùng chung store exam_parser
 
 ### Mục đích

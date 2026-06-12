@@ -46,6 +46,15 @@ class MinioStorage:
         b64 = base64.b64encode(data).decode("ascii")
         return f"data:{content_type};base64,{b64}"
 
+    def list_keys(self, prefix: str) -> list[str]:
+        """List mọi object key dưới prefix (đệ quy). Lỗi → [] (log)."""
+        try:
+            objs = self.client.list_objects(self.bucket, prefix=prefix, recursive=True)
+            return [o.object_name for o in objs]
+        except Exception as e:
+            logger.warning(f"[MinIO] list lỗi prefix={prefix} — {e}")
+            return []
+
 
 _storage: Optional[MinioStorage] = None
 
