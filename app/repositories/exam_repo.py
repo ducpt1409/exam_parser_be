@@ -1,8 +1,8 @@
-"""Repository read-only tới lịch sử đề của AI service (Mongo `exam_parser.exams`).
+"""Repository tới lịch sử đề của AI service (Mongo `exam_parser.exams`).
 
-BE KHÔNG ghi vào store này — chỉ đọc để list lịch sử + lấy chi tiết. Đây là store do
-AI service (exam_parser_paddle) tạo: mỗi đề = 1 document, `_id` = exam_id, có field
-`output` = toàn bộ cấu trúc Exam (ảnh tham chiếu MinIO qua `minio_key`).
+AI service ghi (1 đề = 1 document, `_id` = exam_id, field `output` = cấu trúc Exam,
+ảnh tham chiếu MinIO qua `minio_key`). BE đọc để list lịch sử + lấy chi tiết, và
+xoá document khi user xoá đề (kèm xoá file MinIO — xem ExamService.delete).
 """
 from __future__ import annotations
 
@@ -64,6 +64,11 @@ class ExamRepository:
     def get(self, exam_id: str) -> Optional[dict[str, Any]]:
         """Đọc đầy đủ 1 bản ghi (gồm `output`)."""
         return self.collection.find_one({"_id": exam_id})
+
+    def delete(self, exam_id: str) -> bool:
+        """Xoá 1 bản ghi theo exam_id. Trả True nếu có bản ghi bị xoá."""
+        result = self.collection.delete_one({"_id": exam_id})
+        return result.deleted_count > 0
 
     def ping(self) -> bool:
         try:

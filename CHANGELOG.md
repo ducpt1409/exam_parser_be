@@ -1,5 +1,43 @@
 # Changelog — exam_parser_be
 
+## [1.6.1] - 2026-06-12 - API xoá báo lỗi theo bước (stage + error_code)
+
+### Mục đích
+`DELETE /exams/{exam_id}` lỗi ở bước nào (MinIO/Mongo) phải trả thông báo + mã lỗi
+dừng đúng bước đó để FE hiện popup đầy đủ.
+
+### Giải pháp
+- **`app/services/exam_service.py`**: `ExamDeleteError(stage, error_code, message, detail)`;
+  `delete()` chia 4 bước — [1] lookup Mongo, [2] list MinIO, [3] xoá MinIO, [4] xoá Mongo —
+  lỗi bước nào raise dừng bước đó. Mã lỗi: `BE404` không thấy đề | `BE510` lookup/minio_list
+  | `BE511` minio_delete (xoá dở dang, Mongo giữ nguyên để xoá lại) | `BE512` mongo_delete.
+- **`app/clients/minio_client.py`**: `list_keys(strict=True)` raise thay vì trả [];
+  `remove_keys` trả `(n_ok, failed_keys)`.
+- **`app/routers/exams.py`**: catch `ExamDeleteError` → HTTP 404/502 + body
+  `{status: failed, exam_id, stage, error_code, message, detail}`; lỗi lạ → 500 `BE500`.
+- **FE (`HomePage.jsx`)**: kết quả xoá (thành công/thất bại) hiện trong popup Modal —
+  hiển thị message + error_code + stage + detail; đóng popup (nút/overlay/×) → về trang
+  đầu + load lại danh sách.
+
+---
+
+## [1.6.0] - 2026-06-12 - API xoá đề thi (MinIO + Mongo)
+
+### Mục đích
+Giảm dung lượng store: FE thêm nút thùng rác ở bảng lịch sử → xoá vĩnh viễn 1 đề
+(toàn bộ file MinIO dưới prefix + bản ghi Mongo).
+
+### Giải pháp
+- **`app/clients/minio_client.py`**: thêm `remove_keys(keys)` — xoá từng object,
+  1 key lỗi không dừng cả batch.
+- **`app/repositories/exam_repo.py`**: thêm `delete(exam_id)` (bỏ ghi chú read-only).
+- **`app/services/exam_service.py`**: thêm `delete(exam_id)` — xoá MinIO TRƯỚC, Mongo SAU
+  (xoá file dở dang thì bản ghi vẫn còn để xoá lại).
+- **`app/routers/exams.py`**: `DELETE /api/v1/exams/{exam_id}` → 200
+  `{status:"deleted", exam_id, files_deleted, message}`; 404 nếu đề không tồn tại.
+
+---
+
 ## [1.5.0] - 2026-06-12 - API tải dữ liệu đề thi (zip thư mục MinIO)
 
 ### Mục đích

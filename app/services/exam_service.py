@@ -16,6 +16,20 @@ from app.repositories.exam_repo import ExamRepository
 from app.schemas.exam import ExamDetailResponse, ExamListResponse, ExamSummary
 
 
+class ExamDeleteError(Exception):
+    """Lỗi xoá đề ở 1 bước cụ thể — router map ra response {stage, error_code, ...}.
+
+    Mã lỗi: BE404 lookup | BE510 minio_list | BE511 minio_delete | BE512 mongo_delete.
+    """
+
+    def __init__(self, stage: str, error_code: str, message: str, detail: str = ""):
+        super().__init__(message)
+        self.stage = stage
+        self.error_code = error_code
+        self.message = message
+        self.detail = detail
+
+
 class ExamService:
     def __init__(self, repo: ExamRepository, storage: MinioStorage):
         self.repo = repo
@@ -93,6 +107,57 @@ class ExamService:
         buf.seek(0)
         logger.info(f"[ExamService] zip đề {exam_id}: {n_ok}/{len(keys)} file")
         return f"exam_{exam_id}.zip", buf
+
+    # ------------------------------------------------------------
+    def delete(self, exam_id: str) -> dict[str, Any]:
+        """Xoá 1 đề theo từng bước, lỗi bước nào raise ExamDeleteError dừng ở bước đó.
+
+        Bước: [1] lookup Mongo → [2] list object MinIO → [3] xoá object MinIO →
+        [4] xoá bản ghi Mongo. Xoá MinIO TRƯỚC, Mongo SAU — nếu xoá file dở dang
+        thì bản ghi vẫn còn trong lịch sử để bấm xoá lại (không mồ côi file rác).
+        """
+        # [1] lookup
+        try:
+            doc = self.repo.get(exam_id)
+        except Exception as e:
+            raise ExamDeleteError(
+                "lookup", "BE510", "Không đọc được bản ghi từ Mongo", str(e)) from e
+        if not doc:
+            raise ExamDeleteError(
+                "lookup", "BE404", f"Không tìm thấy đề {exam_id}",
+                "Đề không tồn tại hoặc đã bị xoá trước đó")
+
+        prefix = doc.get("minio_prefix") or f"exams/{exam_id}/"
+
+        # [2] list object MinIO
+        try:
+            keys = self.storage.list_keys(prefix, strict=True)
+        except Exception as e:
+            raise ExamDeleteError(
+                "minio_list", "BE510",
+                "Không liệt kê được file trên MinIO (chưa xoá gì)", str(e)) from e
+
+        # [3] xoá object MinIO
+        files_deleted, failed = self.storage.remove_keys(keys) if keys else (0, [])
+        if failed:
+            preview = ", ".join(failed[:5]) + ("…" if len(failed) > 5 else "")
+            raise ExamDeleteError(
+                "minio_delete", "BE511",
+                f"Xoá MinIO dở dang: {files_deleted}/{len(keys)} file "
+                f"({len(failed)} lỗi) — bản ghi Mongo GIỮ NGUYÊN, hãy xoá lại",
+                f"Key lỗi: {preview}")
+
+        # [4] xoá bản ghi Mongo
+        try:
+            self.repo.delete(exam_id)
+        except Exception as e:
+            raise ExamDeleteError(
+                "mongo_delete", "BE512",
+                f"Đã xoá {files_deleted} file MinIO nhưng xoá bản ghi Mongo lỗi — "
+                f"hãy xoá lại để dọn bản ghi", str(e)) from e
+
+        logger.info(f"[ExamService] xoá đề {exam_id}: {files_deleted} file MinIO + bản ghi Mongo")
+        return {"files_deleted": files_deleted}
 
     # ------------------------------------------------------------
     def _embed_images(self, node: Any, _cache: Optional[dict] = None) -> int:

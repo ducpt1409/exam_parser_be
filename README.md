@@ -28,6 +28,7 @@ mới), **không sửa router/nghiệp vụ**.
 | GET | `/api/v1/exams` | **List lịch sử đề** (lọc `exam_id`/`source_file`, phân trang) |
 | GET | `/api/v1/exams/{exam_id}` | **Chi tiết 1 đề** (output đầy đủ + ảnh nhúng base64) |
 | GET | `/api/v1/exams/{exam_id}/download` | **Tải dữ liệu đề thi**: zip toàn bộ thư mục MinIO của đề (crops + overlay + raw + exam.json) |
+| DELETE | `/api/v1/exams/{exam_id}` | **Xoá đề thi**: toàn bộ file MinIO + bản ghi Mongo (giảm dung lượng) |
 | GET | `/api/v1/health` | Trạng thái BE + ping AI service + store exam_parser |
 
 **POST /documents — thành công:** response gọn, chỉ trạng thái + id. Client (FE/mobile)

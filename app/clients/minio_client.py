@@ -1,7 +1,7 @@
-"""MinIO client (read-only) — lấy bytes ảnh crop theo key để convert base64.
+"""MinIO client — đọc bytes object (convert base64, zip) + xoá object (xoá đề thi).
 
 BE không dùng presigned URL của AI (URL đó ký theo host nội bộ `minio:9000`, không tải
-được từ ngoài). Thay vào đó BE kết nối thẳng MinIO bằng key và đọc object bytes.
+được từ ngoài). Thay vào đó BE kết nối thẳng MinIO bằng key.
 """
 from __future__ import annotations
 
@@ -46,14 +46,36 @@ class MinioStorage:
         b64 = base64.b64encode(data).decode("ascii")
         return f"data:{content_type};base64,{b64}"
 
-    def list_keys(self, prefix: str) -> list[str]:
-        """List mọi object key dưới prefix (đệ quy). Lỗi → [] (log)."""
+    def list_keys(self, prefix: str, strict: bool = False) -> list[str]:
+        """List mọi object key dưới prefix (đệ quy).
+
+        strict=False: lỗi → [] (log) — dùng cho download (404 chung).
+        strict=True : lỗi → raise — dùng cho delete (cần báo đúng bước lỗi).
+        """
         try:
             objs = self.client.list_objects(self.bucket, prefix=prefix, recursive=True)
             return [o.object_name for o in objs]
         except Exception as e:
             logger.warning(f"[MinIO] list lỗi prefix={prefix} — {e}")
+            if strict:
+                raise
             return []
+
+    def remove_keys(self, keys: list[str]) -> tuple[int, list[str]]:
+        """Xoá danh sách object. Trả (số xoá thành công, danh sách key lỗi).
+
+        1 key lỗi không dừng cả batch — xoá hết phần xoá được rồi báo phần lỗi.
+        """
+        n_ok = 0
+        failed: list[str] = []
+        for key in keys:
+            try:
+                self.client.remove_object(self.bucket, key)
+                n_ok += 1
+            except Exception as e:
+                logger.warning(f"[MinIO] xoá lỗi key={key} — {e}")
+                failed.append(key)
+        return n_ok, failed
 
 
 _storage: Optional[MinioStorage] = None
